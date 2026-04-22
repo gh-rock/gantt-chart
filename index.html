@@ -1,0 +1,2659 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gantt Chart Pro v3.0</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=JetBrains+Mono:wght@400;600&display=swap');
+
+  :root {
+    --bg-primary: #0f1117;
+    --bg-secondary: #161b27;
+    --bg-tertiary: #1e2535;
+    --bg-card: #1a2030;
+    --border: #2a3348;
+    --border-light: #3a4560;
+    --text-primary: #e8eaf0;
+    --text-secondary: #8892aa;
+    --text-muted: #556070;
+    --accent-blue: #4a9eff;
+    --accent-blue-dim: rgba(74,158,255,0.15);
+    --accent-green: #34d399;
+    --accent-orange: #fb923c;
+    --accent-red: #f87171;
+    --accent-purple: #a78bfa;
+    --holiday-jp: #ff6b6b;
+    --holiday-cn: #ffd700;
+    --weekend: #2a1f3d;
+    --bar-plan: rgba(74,158,255,0.7);
+    --bar-actual: rgba(52,211,153,0.75);
+    --bar-plan-border: #4a9eff;
+    --bar-actual-border: #34d399;
+    --cell-w: 18px;
+    --row-h: 56px;
+    --header-h: 72px;
+    --label-w: 200px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Noto Sans JP', sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    min-height: 100vh;
+    padding: 16px;
+    font-size: 13px;
+  }
+
+  .app-wrapper {
+    max-width: 960px;
+    margin: 0 auto;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 24px 64px rgba(0,0,0,0.5);
+  }
+
+  /* HEADER */
+  .app-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 20px;
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border);
+  }
+  .app-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--accent-blue);
+    letter-spacing: 0.5px;
+  }
+  .header-meta {
+    display: flex;
+    gap: 24px;
+    font-size: 11px;
+    color: var(--text-secondary);
+  }
+  .header-meta span { display: flex; flex-direction: column; align-items: flex-end; }
+  .header-meta .val { font-family: 'JetBrains Mono', monospace; color: var(--text-primary); font-size: 13px; font-weight: 600; }
+
+  /* CHART SECTION */
+  .chart-section {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    position: relative;
+  }
+  /* ② ラベル列：横スクロールで固定 */
+  .label-col {
+    width: var(--label-w);
+    min-width: var(--label-w);
+    flex-shrink: 0;
+    background: var(--bg-card);
+    border-right: 1px solid var(--border);
+    z-index: 20;
+    position: relative;
+  }
+  .chart-scroll-wrapper {
+    flex: 1;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-light) var(--bg-card);
+  }
+  .chart-scroll-wrapper::-webkit-scrollbar { height: 8px; }
+  .chart-scroll-wrapper::-webkit-scrollbar-track { background: var(--bg-card); }
+  .chart-scroll-wrapper::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 4px; }
+  .chart-scroll-wrapper::-webkit-scrollbar-thumb:hover { background: var(--accent-blue); }
+  .chart-inner {
+    display: flex;
+    min-width: max-content;
+  }
+  /* Vertical scrollbar */
+  .chart-vscroll {
+    width: 14px;
+    background: var(--bg-card);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 4px 0;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+  .chart-vscroll-track {
+    flex: 1;
+    width: 6px;
+    background: var(--border);
+    border-radius: 3px;
+    position: relative;
+    cursor: pointer;
+    min-height: 20px;
+  }
+  .chart-vscroll-thumb {
+    position: absolute;
+    left: 0; right: 0;
+    background: var(--accent-blue);
+    border-radius: 3px;
+    min-height: 16px;
+    cursor: grab;
+    transition: background 0.15s;
+  }
+  .chart-vscroll-thumb:hover, .chart-vscroll-thumb.dragging { background: #7ab8ff; cursor: grabbing; }
+  .chart-vscroll-btn {
+    width: 12px; height: 12px;
+    border-radius: 2px;
+    background: var(--border-light);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; font-size: 8px; color: var(--text-muted);
+    flex-shrink: 0; user-select: none; line-height: 1;
+  }
+  .chart-vscroll-btn:hover { background: var(--accent-blue); color: white; }
+  /* rows viewport clip */
+  .rows-viewport {
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* LABEL COLUMN */
+  .label-header {
+    height: var(--header-h);
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    padding: 0 10px 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  /* ① ソートボタン */
+  .sort-btns {
+    display: flex;
+    gap: 3px;
+    flex-wrap: wrap;
+  }
+  .sort-btn {
+    font-size: 9px;
+    font-family: 'Noto Sans JP', sans-serif;
+    padding: 2px 6px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: var(--bg-tertiary);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .sort-btn:hover { border-color: var(--accent-blue); color: var(--accent-blue); }
+  .sort-btn.asc  { background: var(--accent-blue-dim); border-color: var(--accent-blue); color: var(--accent-blue); }
+  .sort-btn.desc { background: rgba(167,139,250,0.15); border-color: var(--accent-purple); color: var(--accent-purple); }
+  .sort-btn.asc::after  { content: ' ▲'; font-size: 8px; }
+  .sort-btn.desc::after { content: ' ▼'; font-size: 8px; }
+
+  .task-label {
+    height: var(--row-h);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 0 12px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .task-label:hover { background: var(--bg-tertiary); }
+  .task-label.selected { background: var(--accent-blue-dim); border-left: 2px solid var(--accent-blue); }
+  .task-label-id {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; font-weight: 700;
+    color: var(--accent-blue);
+    line-height: 1.3;
+  }
+  .task-label-row {
+    display: flex; gap: 4px; align-items: baseline;
+    margin-top: 1px;
+  }
+  .task-label-key {
+    font-size: 9px; color: var(--text-muted);
+    min-width: 22px; flex-shrink: 0;
+  }
+  .task-label-val {
+    font-size: 10px; color: var(--text-primary);
+    font-weight: 500; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap;
+  }
+  .task-label-sub { display: none; }
+
+  /* GRID AREA */
+  .grid-area {
+    flex: 1;
+    position: relative;
+  }
+
+  /* DATE HEADER */
+  .date-header {
+    height: var(--header-h);
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    position: relative;
+  }
+
+  .day-col {
+    width: var(--cell-w);
+    min-width: var(--cell-w);
+    flex-shrink: 0;
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    padding-top: 6px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .day-col.weekend { background: var(--weekend); }
+  .day-col.holiday-jp { background: rgba(255,107,107,0.12); }
+  .day-col.holiday-cn { background: rgba(255,215,0,0.08); }
+  .day-col.today { background: rgba(74,158,255,0.12); }
+
+  .day-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1;
+  }
+  .day-col.weekend .day-num { color: var(--accent-purple); }
+  .day-col.holiday-jp .day-num { color: var(--holiday-jp); }
+  .day-col.holiday-cn .day-num { color: var(--holiday-cn); }
+  .day-col.today .day-num { color: var(--accent-blue); }
+
+  .day-weekday {
+    font-size: 7px;
+    color: var(--text-muted);
+    margin-top: 1px;
+    font-weight: 500;
+  }
+  .day-col.weekend .day-weekday { color: var(--accent-purple); opacity: 0.8; }
+
+  .holiday-badge {
+    font-size: 6px;
+    line-height: 1.1;
+    text-align: center;
+    margin-top: 2px;
+    padding: 0;
+    width: 100%;
+    overflow: hidden;
+    word-break: break-all;
+    hyphens: auto;
+  }
+  .holiday-badge.jp { color: var(--holiday-jp); font-weight: 600; }
+  .holiday-badge.cn { color: var(--holiday-cn); font-weight: 600; }
+  .holiday-badge.both { color: #ff9; font-weight: 600; }
+
+  /* GRID ROWS */
+  .grid-rows {
+    position: relative;
+  }
+
+  .grid-row {
+    height: var(--row-h);
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    position: relative;
+  }
+
+  .grid-cell {
+    width: var(--cell-w);
+    min-width: var(--cell-w);
+    flex-shrink: 0;
+    border-right: 1px solid var(--border);
+    height: 100%;
+    position: relative;
+  }
+  .grid-cell.weekend { background: var(--weekend); }
+  .grid-cell.holiday-jp { background: rgba(255,107,107,0.06); }
+  .grid-cell.holiday-cn { background: rgba(255,215,0,0.04); }
+  .grid-cell.today { background: rgba(74,158,255,0.06); }
+
+  /* BARS */
+  .bar-container {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+  }
+
+  .gantt-bar {
+    position: absolute;
+    height: 14px;
+    border-radius: 3px;
+    cursor: grab;
+    pointer-events: all;
+    transition: filter 0.1s, box-shadow 0.1s;
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+    user-select: none;
+    touch-action: none;
+  }
+  .gantt-bar:hover {
+    filter: brightness(1.2);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    z-index: 20;
+  }
+  .gantt-bar.dragging {
+    cursor: grabbing;
+    filter: brightness(1.3);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+    z-index: 100;
+    opacity: 0.9;
+  }
+
+  .gantt-bar.plan {
+    top: 2px;
+    height: 10px;
+    background: var(--bar-plan);
+    border: 1px dashed var(--bar-plan-border);
+  }
+  .gantt-bar.actual {
+    top: 14px;
+    height: 10px;
+    background: var(--bar-actual);
+    border: 1px solid var(--bar-actual-border);
+  }
+
+  .bar-label {
+    font-size: 9px;
+    font-weight: 600;
+    color: white;
+    padding: 0 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    pointer-events: none;
+  }
+
+  /* Resize handles */
+  .bar-resize-left, .bar-resize-right {
+    position: absolute;
+    top: 0;
+    width: 6px;
+    height: 100%;
+    cursor: col-resize;
+    pointer-events: all;
+    z-index: 5;
+  }
+  .bar-resize-left { left: 0; }
+  .bar-resize-right { right: 0; }
+
+  /* TODAY LINE */
+  .today-line {
+    position: absolute;
+    top: 0;
+    width: 2px;
+    background: var(--accent-blue);
+    opacity: 0.6;
+    pointer-events: none;
+    z-index: 5;
+  }
+
+  /* TABLE */
+  .table-section {
+    padding: 0;
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+    position: relative;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  thead tr {
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border);
+  }
+  th {
+    padding: 8px 12px;
+    text-align: left;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-muted);
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+  }
+  td {
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-secondary);
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--bg-tertiary); }
+  .td-id { font-family: 'JetBrains Mono', monospace; color: var(--accent-blue); font-weight: 600; }
+  .td-type { color: var(--text-primary); font-weight: 500; }
+  .badge {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+  }
+  .badge-plan { background: rgba(74,158,255,0.15); color: var(--accent-blue); }
+  .badge-actual { background: rgba(52,211,153,0.15); color: var(--accent-green); }
+  .badge-pending { background: rgba(251,146,60,0.15); color: var(--accent-orange); }
+
+  /* CONTROLS */
+  .controls-section {
+    padding: 16px 20px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .ctrl-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .ctrl-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    min-width: 100px;
+    font-weight: 500;
+  }
+
+  input[type="range"] {
+    flex: 1;
+    height: 4px;
+    -webkit-appearance: none;
+    background: var(--border-light);
+    border-radius: 2px;
+    outline: none;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--accent-blue);
+    cursor: pointer;
+  }
+
+  .ctrl-val {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--text-primary);
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 3px 8px;
+    min-width: 40px;
+    text-align: center;
+  }
+
+  .btn-group {
+    display: flex;
+    gap: 6px;
+  }
+  .btn {
+    padding: 5px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    font-size: 11px;
+    cursor: pointer;
+    font-family: 'Noto Sans JP', sans-serif;
+    transition: all 0.15s;
+    font-weight: 500;
+  }
+  .btn:hover { border-color: var(--accent-blue); color: var(--accent-blue); }
+  .btn.active { background: var(--accent-blue-dim); border-color: var(--accent-blue); color: var(--accent-blue); font-weight: 700; }
+
+  .toggle-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .toggle {
+    width: 36px; height: 20px;
+    border-radius: 10px;
+    background: var(--border-light);
+    position: relative;
+    cursor: pointer;
+    transition: background 0.2s;
+    flex-shrink: 0;
+  }
+  .toggle.on { background: var(--accent-blue); }
+  .toggle::after {
+    content: '';
+    position: absolute;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: white;
+    top: 3px; left: 3px;
+    transition: transform 0.2s;
+  }
+  .toggle.on::after { transform: translateX(16px); }
+
+  select {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-family: 'Noto Sans JP', sans-serif;
+    outline: none;
+    cursor: pointer;
+  }
+  select:focus { border-color: var(--accent-blue); }
+
+  .btn-reset {
+    grid-column: 1 / -1;
+    padding: 10px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text-secondary);
+    font-size: 13px;
+    cursor: pointer;
+    font-family: 'Noto Sans JP', sans-serif;
+    transition: all 0.15s;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+  }
+  .btn-reset:hover { background: rgba(248,113,113,0.1); border-color: var(--accent-red); color: var(--accent-red); }
+
+  /* LEGEND */
+  .legend {
+    display: flex;
+    gap: 16px;
+    padding: 10px 20px;
+    background: var(--bg-primary);
+    font-size: 10px;
+    color: var(--text-muted);
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .legend-item { display: flex; align-items: center; gap: 5px; }
+  .legend-dot {
+    width: 20px; height: 8px;
+    border-radius: 2px;
+  }
+  .legend-dot.plan { background: var(--bar-plan); border: 1px dashed var(--bar-plan-border); }
+  .legend-dot.actual { background: var(--bar-actual); border: 1px solid var(--bar-actual-border); }
+  .legend-dot.jp-h { background: rgba(255,107,107,0.35); border: 1px solid var(--holiday-jp); }
+  .legend-dot.cn-h { background: rgba(255,215,0,0.2); border: 1px solid var(--holiday-cn); }
+
+  /* TOOLTIP */
+  .tooltip {
+    position: fixed;
+    background: var(--bg-card);
+    border: 1px solid var(--border-light);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 11px;
+    color: var(--text-primary);
+    pointer-events: none;
+    z-index: 1000;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    display: none;
+    max-width: 200px;
+  }
+  .tooltip.visible { display: block; }
+  .tooltip-title { font-weight: 700; color: var(--accent-blue); margin-bottom: 4px; }
+  .tooltip-row { display: flex; justify-content: space-between; gap: 12px; color: var(--text-secondary); }
+  .tooltip-row span:last-child { color: var(--text-primary); font-family: 'JetBrains Mono', monospace; }
+
+  /* month label */
+  .month-band {
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border);
+    padding: 5px 12px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    letter-spacing: 1px;
+    display: flex;
+    gap: 2px;
+    align-items: center;
+    min-width: max-content;
+  }
+  .month-segment {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .month-name {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--accent-blue);
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .gantt-bar.aging {
+    height: 10px;
+    background: rgba(251,146,60,0.65);
+    border: 1px solid #fb923c;
+    border-radius: 3px;
+    overflow: visible;
+  }
+  .bar-diebonder-icon {
+    position: absolute;
+    left: -22px;
+    top: -1px;
+    width: 20px;
+    height: 12px;
+    pointer-events: none;
+    filter: drop-shadow(0 0 2px rgba(251,146,60,0.6));
+  }
+  /* Markers (inspect / ship) */
+  .gantt-marker {
+    position: absolute;
+    width: 14px; height: 14px;
+    border-radius: 3px;
+    pointer-events: all;
+    cursor: grab;
+    z-index: 15;
+    display: flex; align-items: center; justify-content: center;
+    transition: filter 0.1s, box-shadow 0.1s;
+    user-select: none;
+  }
+  .gantt-marker:hover {
+    filter: brightness(1.25);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    z-index: 25;
+  }
+  .gantt-marker.dragging {
+    cursor: grabbing;
+    filter: brightness(1.4);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+    z-index: 100;
+    opacity: 0.9;
+  }
+  .gantt-marker.aging-icon {
+    background: rgba(251,146,60,0.2);
+    border: 1px solid #fb923c;
+    width: 15px;
+    height: 15px;
+    border-radius: 3px;
+    display: flex; align-items: center; justify-content: center;
+    filter: drop-shadow(0 0 2px rgba(251,146,60,0.5));
+  }
+  .gantt-marker.aging-icon:hover {
+    background: rgba(251,146,60,0.4);
+    filter: brightness(1.3) drop-shadow(0 0 3px rgba(251,146,60,0.7));
+  }
+    height: 10px;
+    background: rgba(52,211,153,0.5);
+    border: 1px solid #34d399;
+    border-radius: 3px;
+  }
+  .gantt-marker.inspect-first { cursor: w-resize; border-left: 2px solid #c084fc; }
+  .gantt-marker.inspect-last  { cursor: e-resize; border-right: 2px solid #c084fc; }
+    background: rgba(167,139,250,0.85);
+    border: 1px solid #a78bfa;
+  }
+  .gantt-marker.ship {
+    background: rgba(255,215,0,0.85);
+    border: 1px solid #ffd700;
+  }
+  .marker-label {
+    font-size: 10px;
+    line-height: 1;
+    pointer-events: none;
+  }
+
+  /* MEMO IN CHART */
+  .bar-memo-label {
+    position: absolute;
+    height: 12px;
+    line-height: 12px;
+    font-size: 9px;
+    color: var(--accent-orange);
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 15;
+    background: rgba(15,17,23,0.7);
+    padding: 0 3px;
+    border-radius: 2px;
+    border-left: 2px solid var(--accent-orange);
+    max-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .modal-section-divider {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--accent-blue);
+    letter-spacing: 0.8px;
+    margin: 12px 0 6px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+  }
+  .modal-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .modal-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .modal-input {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    padding: 6px 8px;
+    outline: none;
+    transition: border-color 0.15s;
+    width: 100%;
+    color-scheme: dark;
+  }
+  .modal-input:focus { border-color: var(--accent-blue); }
+
+  .btn-add-task {
+    padding: 10px 20px;
+    background: rgba(52,211,153,0.12);
+    border: 1px solid var(--accent-green);
+    border-radius: 8px;
+    color: var(--accent-green);
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: 'Noto Sans JP', sans-serif;
+    letter-spacing: 0.5px;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .btn-add-task:hover { background: rgba(52,211,153,0.25); }
+    margin-left: 10px;
+    padding: 5px 10px;
+    background: var(--accent-blue-dim);
+    border: 1px solid var(--accent-blue);
+    border-radius: 6px;
+    color: var(--accent-blue);
+    font-size: 14px;
+    cursor: pointer;
+    transition: background 0.15s;
+    flex-shrink: 0;
+  }
+  .ctrl-edit-btn:hover { background: rgba(74,158,255,0.3); }
+
+  /* EDITABLE CELL */
+  .td-editable { position: relative; }
+  .td-editable:hover .edit-btn { opacity: 1; }
+  .edit-btn {
+    opacity: 0;
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 4px;
+    cursor: pointer;
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-left: 4px;
+    transition: opacity 0.15s, border-color 0.15s, background 0.15s;
+    vertical-align: middle;
+  }
+  .edit-btn.always-visible { opacity: 1; }
+  .edit-btn:hover { border-color: var(--accent-blue); background: var(--accent-blue-dim); }
+
+  /* EXCEL FILTER */
+  .th-filter {
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+  }
+  .th-filter:hover { color: var(--accent-blue); }
+  .th-filter.active-filter { color: var(--accent-blue); }
+  .th-filter.active-filter .th-arrow { color: var(--accent-blue); }
+  .th-arrow { font-size: 9px; opacity: 0.6; margin-left: 2px; }
+
+  .col-filter-dropdown {
+    display: none;
+    position: absolute;
+    background: var(--bg-card);
+    border: 1px solid var(--border-light);
+    border-radius: 8px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    z-index: 3000;
+    min-width: 180px;
+    max-width: 260px;
+    overflow: hidden;
+  }
+  .col-filter-dropdown.open { display: block; }
+
+  .col-filter-search {
+    padding: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .col-filter-search input {
+    width: 100%;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    color: var(--text-primary);
+    font-size: 12px;
+    padding: 5px 8px;
+    outline: none;
+    font-family: 'Noto Sans JP', sans-serif;
+  }
+  .col-filter-search input:focus { border-color: var(--accent-blue); }
+
+  .col-filter-list {
+    max-height: 200px;
+    overflow-y: auto;
+    padding: 4px 0;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-light) transparent;
+  }
+  .col-filter-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 12px;
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--text-primary);
+    transition: background 0.1s;
+  }
+  .col-filter-item:hover { background: var(--bg-tertiary); }
+  .col-filter-item input[type="checkbox"] {
+    accent-color: var(--accent-blue);
+    width: 13px; height: 13px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .col-filter-footer {
+    display: flex;
+    gap: 4px;
+    padding: 8px;
+    border-top: 1px solid var(--border);
+    background: var(--bg-tertiary);
+  }
+  .col-filter-btn {
+    flex: 1;
+    padding: 4px 6px;
+    font-size: 10px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg-card);
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-family: 'Noto Sans JP', sans-serif;
+    transition: all 0.15s;
+  }
+  .col-filter-btn:hover { border-color: var(--accent-blue); color: var(--accent-blue); }
+  .col-filter-apply { background: var(--accent-blue-dim); border-color: var(--accent-blue); color: var(--accent-blue); font-weight: 700; }
+  .col-filter-apply:hover { background: rgba(74,158,255,0.3); }
+
+  /* MEMO CELL */
+  .td-memo {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 140px;
+    max-width: 220px;
+  }
+  .memo-text {
+    flex: 1;
+    font-size: 11px;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: default;
+  }
+  .memo-empty {
+    flex: 1;
+    color: var(--text-muted);
+    font-size: 11px;
+  }
+  .memo-btn {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 5px;
+    cursor: pointer;
+    font-size: 11px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+    transition: border-color 0.15s, background 0.15s;
+    line-height: 1;
+  }
+  .memo-btn:hover { border-color: var(--accent-blue); background: var(--accent-blue-dim); }
+
+  /* MODAL */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.65);
+    z-index: 2000;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(3px);
+  }
+  .modal-overlay.visible { display: flex; }
+  .modal-box {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-light);
+    border-radius: 12px;
+    width: 420px;
+    max-width: 95vw;
+    box-shadow: 0 32px 80px rgba(0,0,0,0.6);
+    overflow: hidden;
+    animation: modalIn 0.18s ease;
+  }
+  @keyframes modalIn {
+    from { opacity: 0; transform: scale(0.95) translateY(8px); }
+    to   { opacity: 1; transform: scale(1) translateY(0); }
+  }
+  .modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 18px;
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border);
+  }
+  .modal-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--accent-blue);
+  }
+  .modal-close {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 14px;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 4px;
+    transition: color 0.15s, background 0.15s;
+  }
+  .modal-close:hover { color: var(--accent-red); background: rgba(248,113,113,0.1); }
+  .modal-body {
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .modal-meta {
+    font-size: 11px;
+    color: var(--text-muted);
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 7px 10px;
+  }
+  .modal-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    letter-spacing: 0.5px;
+  }
+  .modal-textarea {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-family: 'Noto Sans JP', sans-serif;
+    font-size: 13px;
+    padding: 10px 12px;
+    resize: vertical;
+    outline: none;
+    line-height: 1.6;
+    transition: border-color 0.15s;
+    width: 100%;
+  }
+  .modal-textarea:focus { border-color: var(--accent-blue); }
+  .modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 12px 18px;
+    background: var(--bg-card);
+    border-top: 1px solid var(--border);
+  }
+  .modal-btn-cancel {
+    padding: 7px 16px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    color: var(--text-secondary);
+    font-size: 12px;
+    cursor: pointer;
+    font-family: 'Noto Sans JP', sans-serif;
+    transition: all 0.15s;
+  }
+  .modal-btn-cancel:hover { border-color: var(--text-secondary); color: var(--text-primary); }
+  .modal-btn-save {
+    padding: 7px 20px;
+    background: var(--accent-blue);
+    border: 1px solid var(--accent-blue);
+    border-radius: 7px;
+    color: white;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: 'Noto Sans JP', sans-serif;
+    transition: all 0.15s;
+  }
+  .modal-btn-save:hover { background: #7ab8ff; border-color: #7ab8ff; }
+</style>
+</head>
+<body>
+
+<div class="app-wrapper">
+  <!-- HEADER -->
+  <div class="app-header">
+    <div class="app-title">Gantt Chart Pro v3.0</div>
+    <div class="header-meta">
+      <span>表示タスク<span class="val" id="hdr-tasks">1–4 / 4</span></span>
+      <span>開始日<span class="val" id="hdr-start">2026/01/01</span></span>
+      <span>モード<span class="val">ダーク / 俯瞰</span></span>
+    </div>
+  </div>
+
+  <!-- CHART -->
+  <div class="chart-section">
+    <!-- ② ラベル列：横スクロールに関係なく固定 -->
+    <div class="label-col" id="labelCol">
+      <div class="label-header">
+        <div style="font-size:10px;color:var(--text-muted);margin-bottom:4px">タスク / 担当</div>
+        <div class="sort-btns">
+          <button class="sort-btn" onclick="setSortKey('id')"     id="sort-id">ID</button>
+          <button class="sort-btn" onclick="setSortKey('model')"  id="sort-model">品種</button>
+          <button class="sort-btn" onclick="setSortKey('customer')" id="sort-customer">顧客</button>
+          <button class="sort-btn" onclick="setSortKey('person')" id="sort-person">担当</button>
+        </div>
+      </div>
+      <div class="rows-viewport" id="labelViewport">
+        <div id="taskLabels"></div>
+      </div>
+    </div>
+    <!-- グリッド：横スクロール対象 -->
+    <div class="chart-scroll-wrapper" id="chartScroll">
+      <div class="chart-inner" id="chartInner">
+        <!-- grid -->
+        <div class="grid-area" id="gridArea">
+          <div id="monthBand" class="month-band"></div>
+          <div class="date-header" id="dateHeader"></div>
+          <div class="rows-viewport" id="rowsViewport">
+            <div class="grid-rows" id="gridRows">
+              <div class="bar-container" id="barContainer"></div>
+            </div>
+          </div>
+          <div class="today-line" id="todayLine"></div>
+        </div>
+      </div>
+    </div>
+    <!-- Vertical scrollbar -->
+    <div class="chart-vscroll" id="chartVScroll">
+      <div class="chart-vscroll-btn" id="vscrollUp">▲</div>
+      <div class="chart-vscroll-track" id="vscrollTrack">
+        <div class="chart-vscroll-thumb" id="vscrollThumb"></div>
+      </div>
+      <div class="chart-vscroll-btn" id="vscrollDown">▼</div>
+    </div>
+  </div>
+
+  <!-- TABLE -->
+  <div class="table-section">
+    <table id="mainTable">
+      <thead>
+        <tr id="tableHead">
+          <th class="th-filter" data-col="id">ID <span class="th-arrow">▾</span></th>
+          <th class="th-filter" data-col="customer">顧客名 <span class="th-arrow">▾</span></th>
+          <th class="th-filter" data-col="model">機種 <span class="th-arrow">▾</span></th>
+          <th class="th-filter" data-col="person">担当 <span class="th-arrow">▾</span></th>
+          <th>予定期間</th>
+          <th>実績期間</th>
+          <th>エージング</th>
+          <th>検査日</th>
+          <th>出荷日</th>
+          <th>備考</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+    <!-- フィルタードロップダウン -->
+    <div class="col-filter-dropdown" id="colFilterDropdown">
+      <div class="col-filter-search">
+        <input type="text" id="colFilterSearch" placeholder="検索..." oninput="filterDropdownList(this.value)">
+      </div>
+      <div class="col-filter-list" id="colFilterList"></div>
+      <div class="col-filter-footer">
+        <button class="col-filter-btn" onclick="colFilterSelectAll()">全選択</button>
+        <button class="col-filter-btn" onclick="colFilterClearAll()">全解除</button>
+        <button class="col-filter-btn col-filter-apply" onclick="applyColFilter()">適用</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONTROLS -->
+  <div class="controls-section">
+    <div class="ctrl-row">
+      <span class="ctrl-label">表示期間</span>
+      <select id="periodSel" onchange="setPeriodFromSel(this)" style="font-family:'JetBrains Mono',monospace;min-width:90px">
+        <option value="1">1ヶ月</option>
+        <option value="2">2ヶ月</option>
+        <option value="3">3ヶ月</option>
+        <option value="4">4ヶ月</option>
+        <option value="5">5ヶ月</option>
+        <option value="6">6ヶ月</option>
+        <option value="7">7ヶ月</option>
+        <option value="8">8ヶ月</option>
+        <option value="9">9ヶ月</option>
+        <option value="10">10ヶ月</option>
+        <option value="11">11ヶ月</option>
+        <option value="12">12ヶ月</option>
+      </select>
+    </div>
+    <div class="ctrl-row" style="grid-column:1/-1;">
+      <span class="ctrl-label" style="min-width:80px">予定表示</span>
+      <div class="toggle on" id="togPlan" onclick="toggleVis('plan')"></div>
+      <span class="ctrl-label" style="min-width:80px; margin-left:16px;">実績表示</span>
+      <div class="toggle on" id="togActual" onclick="toggleVis('actual')"></div>
+      <span class="ctrl-label" style="min-width:80px; margin-left:16px;">備考表示</span>
+      <div class="toggle on" id="togMemo" onclick="toggleVis('memo')"></div>
+    </div>
+    <div class="ctrl-row" style="grid-column:1/-1;">
+      <span class="ctrl-label" style="min-width:80px">エージング</span>
+      <div class="toggle on" id="togAging" onclick="toggleVis('aging')"></div>
+      <span class="ctrl-label" style="min-width:80px; margin-left:16px;">検査日</span>
+      <div class="toggle on" id="togInspect" onclick="toggleVis('inspect')"></div>
+      <span class="ctrl-label" style="min-width:80px; margin-left:16px;">出荷日</span>
+      <div class="toggle on" id="togShip" onclick="toggleVis('ship')"></div>
+    </div>
+    <div class="ctrl-row">
+      <span class="ctrl-label">編集タスクID</span>
+      <select id="editTaskSel" onchange="selectTask(this.value)"></select>
+      <span class="ctrl-label" style="min-width:50px;margin-left:12px">品種</span>
+      <select id="filterModel" onchange="applyFilters()"></select>
+    </div>
+    <div class="ctrl-row" style="grid-column:1/-1;">
+      <span class="ctrl-label">顧客名</span>
+      <select id="filterCustomer" onchange="applyFilters()"></select>
+      <span class="ctrl-label" style="min-width:50px">担当者</span>
+      <select id="filterPerson" onchange="applyFilters()"></select>
+      <button class="ctrl-edit-btn" onclick="openFieldModal(selectedTaskId)" title="選択タスクのID・品種・顧客名・担当者を編集">✏️</button>
+    </div>
+    <div style="grid-column:1/-1;display:flex;gap:10px;">
+      <button class="btn-add-task" onclick="openAddTaskModal()">＋ タスク追加</button>
+      <button class="btn-reset" style="flex:1" onclick="resetAll()">リセット</button>
+    </div>
+  </div>
+
+  <!-- LEGEND -->
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot plan"></div>生産予定</div>
+    <div class="legend-item"><div class="legend-dot actual"></div>生産実績</div>
+    <div class="legend-item">
+      <svg viewBox="0 0 18 18" width="13" height="13" style="flex-shrink:0">
+        <rect x="1" y="13" width="16" height="3" rx="0.5" fill="#fb923c"/>
+        <rect x="3" y="10" width="12" height="2.5" rx="0.3" fill="#fbbf24"/>
+        <rect x="7.5" y="7.5" width="3" height="2.5" rx="0.2" fill="#fff" opacity="0.95"/>
+        <rect x="8.3" y="2" width="1.4" height="6" rx="0.3" fill="#fb923c"/>
+        <rect x="2" y="2" width="14" height="1.6" rx="0.4" fill="#fb923c"/>
+        <polygon points="8.5,7 9.5,7 9,8.5" fill="#fff" opacity="0.9"/>
+        <rect x="2" y="3.6" width="1.2" height="9" rx="0.3" fill="#fb923c" opacity="0.7"/>
+        <rect x="14.8" y="3.6" width="1.2" height="9" rx="0.3" fill="#fb923c" opacity="0.7"/>
+      </svg>
+      エージング（日毎にアイコン・端ドラッグで増減）
+    </div>
+    <div class="legend-item">🔍 検査（期間延長でアイコン増加・ドラッグで移動）</div>
+    <div class="legend-item">🚢 出荷日（ドラッグで移動）</div>
+    <div class="legend-item"><div class="legend-dot jp-h"></div>🇯🇵 日本祝日</div>
+    <div class="legend-item"><div class="legend-dot cn-h"></div>🇨🇳 中国祝日</div>
+  </div>
+</div>
+
+<!-- TASK EDIT MODAL -->
+<div class="modal-overlay" id="memoModal" onclick="closeMemoModal(event)">
+  <div class="modal-box" style="width:500px">
+    <div class="modal-header">
+      <span class="modal-title" id="memoModalTitle">タスク編集</span>
+      <button class="modal-close" onclick="closeMemoModalDirect()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-meta" id="memoModalMeta"></div>
+
+      <div class="modal-grid">
+        <div class="modal-field">
+          <label class="modal-label">🏭 エージング 開始</label>
+          <input type="date" class="modal-input" id="inp-agingStart">
+        </div>
+        <div class="modal-field">
+          <label class="modal-label">🏭 エージング 終了</label>
+          <input type="date" class="modal-input" id="inp-agingEnd">
+        </div>
+        <div class="modal-field">
+          <label class="modal-label">🔍 検査 開始日</label>
+          <input type="date" class="modal-input" id="inp-inspectStart">
+        </div>
+        <div class="modal-field">
+          <label class="modal-label">🔍 検査 終了日</label>
+          <input type="date" class="modal-input" id="inp-inspectEnd">
+        </div>
+        <div class="modal-field">
+          <label class="modal-label">🚢 出荷日</label>
+          <input type="date" class="modal-input" id="inp-shipDate">
+        </div>
+      </div>
+
+      <label class="modal-label" style="margin-top:8px;display:block">予定備考・日程メモ</label>
+      <textarea class="modal-textarea" id="memoInput" placeholder="例：前工程待ち・材料入荷予定1/4・客先確認済み など" rows="3"></textarea>
+    </div>
+    <div class="modal-footer">
+      <button class="modal-btn-cancel" onclick="closeMemoModalDirect()">キャンセル</button>
+      <button class="modal-btn-save" onclick="saveMemo()">保存</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let memoEditId = null;
+
+function toInputDate(d) {
+  if (!d) return '';
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function fromInputDate(s) {
+  if (!s) return null;
+  const [y,m,d] = s.split('-').map(Number);
+  return new Date(y, m-1, d);
+}
+
+function openMemoModal(taskId) {
+  const t = tasks.find(x => x.id === taskId);
+  if (!t) return;
+  memoEditId = taskId;
+  document.getElementById('memoModalTitle').textContent = `タスク編集 — ${t.id}: ${t.model}`;
+  document.getElementById('memoModalMeta').textContent = `${t.customer} ／ 担当: ${t.person} ／ 予定: ${fmtDate(t.planStart)} – ${fmtDate(t.planEnd)}`;
+  document.getElementById('inp-agingStart').value   = toInputDate(t.agingStart);
+  document.getElementById('inp-agingEnd').value     = toInputDate(t.agingEnd);
+  document.getElementById('inp-inspectStart').value = toInputDate(t.inspectStart);
+  document.getElementById('inp-inspectEnd').value   = toInputDate(t.inspectEnd);
+  document.getElementById('inp-shipDate').value     = toInputDate(t.shipDate);
+  document.getElementById('memoInput').value        = t.memo || '';
+  document.getElementById('memoModal').classList.add('visible');
+  setTimeout(() => document.getElementById('inp-agingStart').focus(), 50);
+}
+
+function closeMemoModal(e) {
+  if (e.target === document.getElementById('memoModal')) closeMemoModalDirect();
+}
+function closeMemoModalDirect() {
+  document.getElementById('memoModal').classList.remove('visible');
+  memoEditId = null;
+}
+function saveMemo() {
+  if (memoEditId === null) return;
+  const t = tasks.find(x => x.id === memoEditId);
+  if (t) {
+    t.agingStart   = fromInputDate(document.getElementById('inp-agingStart').value);
+    t.agingEnd     = fromInputDate(document.getElementById('inp-agingEnd').value);
+    t.inspectStart = fromInputDate(document.getElementById('inp-inspectStart').value);
+    t.inspectEnd   = fromInputDate(document.getElementById('inp-inspectEnd').value);
+    t.shipDate     = fromInputDate(document.getElementById('inp-shipDate').value);
+    t.memo         = document.getElementById('memoInput').value.trim();
+  }
+  closeMemoModalDirect();
+  render();
+}
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeMemoModalDirect();
+});
+</script>
+<!-- ADD TASK MODAL -->
+<div class="modal-overlay" id="addTaskModal" onclick="closeAddTaskModal(event)">
+  <div class="modal-box" style="width:480px;max-height:90vh;overflow-y:auto">
+    <div class="modal-header">
+      <span class="modal-title">タスク追加</span>
+      <button class="modal-close" onclick="closeAddTaskModalDirect()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-grid">
+        <div class="modal-field" style="grid-column:1/-1">
+          <label class="modal-label">タスクID（1〜9999）</label>
+          <select class="modal-input" id="addTaskId" style="font-family:'JetBrains Mono',monospace"></select>
+        </div>
+        <div class="modal-field">
+          <label class="modal-label">品種</label>
+          <input type="text" class="modal-input" id="addModel" placeholder="例: SOT-23">
+        </div>
+        <div class="modal-field">
+          <label class="modal-label">顧客名</label>
+          <input type="text" class="modal-input" id="addCustomer" placeholder="例: 計画生産">
+        </div>
+        <div class="modal-field" style="grid-column:1/-1">
+          <label class="modal-label">担当者</label>
+          <input type="text" class="modal-input" id="addPerson" placeholder="例: 朱">
+        </div>
+      </div>
+
+      <div class="modal-section-divider">📅 予定・実績期間</div>
+      <div class="modal-grid">
+        <div class="modal-field">
+          <label class="modal-label">予定 開始日</label>
+          <input type="date" class="modal-input" id="addPlanStart">
+        </div>
+        <div class="modal-field">
+          <label class="modal-label">予定 終了日</label>
+          <input type="date" class="modal-input" id="addPlanEnd">
+        </div>
+        <div class="modal-field">
+          <label class="modal-label">実績 開始日</label>
+          <input type="date" class="modal-input" id="addActualStart">
+        </div>
+        <div class="modal-field">
+          <label class="modal-label">実績 終了日</label>
+          <input type="date" class="modal-input" id="addActualEnd">
+        </div>
+      </div>
+
+      <div class="modal-section-divider">🏭 エージング</div>
+      <div class="modal-grid">
+        <div class="modal-field">
+          <label class="modal-label">エージング 開始日</label>
+          <input type="date" class="modal-input" id="addAgingStart">
+        </div>
+        <div class="modal-field">
+          <label class="modal-label">エージング 終了日</label>
+          <input type="date" class="modal-input" id="addAgingEnd">
+        </div>
+      </div>
+
+      <div class="modal-section-divider">🔍 検査</div>
+      <div class="modal-grid">
+        <div class="modal-field">
+          <label class="modal-label">検査 開始日</label>
+          <input type="date" class="modal-input" id="addInspectStart">
+        </div>
+        <div class="modal-field">
+          <label class="modal-label">検査 終了日</label>
+          <input type="date" class="modal-input" id="addInspectEnd">
+        </div>
+      </div>
+
+      <div class="modal-section-divider">🚢 出荷</div>
+      <div class="modal-grid">
+        <div class="modal-field">
+          <label class="modal-label">出荷日</label>
+          <input type="date" class="modal-input" id="addShipDate">
+        </div>
+      </div>
+
+      <div id="addTaskError" style="color:var(--accent-red);font-size:11px;margin-top:8px;display:none"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="modal-btn-cancel" onclick="closeAddTaskModalDirect()">キャンセル</button>
+      <button class="modal-btn-save" onclick="saveAddTask()">追加</button>
+    </div>
+  </div>
+</div>
+
+<!-- FIELD EDIT MODAL (4項目まとめて編集) -->
+<div class="modal-overlay" id="fieldModal" onclick="closeFieldModal(event)">
+  <div class="modal-box" style="width:400px">
+    <div class="modal-header">
+      <span class="modal-title" id="fieldModalTitle">タスク情報編集</span>
+      <button class="modal-close" onclick="closeFieldModalDirect()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-meta" id="fieldModalMeta"></div>
+      <div class="modal-grid" style="margin-top:10px">
+        <div class="modal-field">
+          <label class="modal-label">ID</label>
+          <input type="text" class="modal-input" id="finp-id" placeholder="例: 82">
+        </div>
+        <div class="modal-field">
+          <label class="modal-label">品種</label>
+          <input type="text" class="modal-input" id="finp-model" placeholder="例: SOT-23">
+        </div>
+        <div class="modal-field">
+          <label class="modal-label">顧客名</label>
+          <input type="text" class="modal-input" id="finp-customer" placeholder="例: 計画生産">
+        </div>
+        <div class="modal-field">
+          <label class="modal-label">担当者</label>
+          <input type="text" class="modal-input" id="finp-person" placeholder="例: 朱">
+        </div>
+      </div>
+      <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border)">
+        <div style="font-size:10px;font-weight:700;color:var(--accent-blue);letter-spacing:0.8px;margin-bottom:8px">期間</div>
+        <div class="modal-grid">
+          <div class="modal-field">
+            <label class="modal-label">📅 予定 開始日</label>
+            <input type="date" class="modal-input" id="finp-planStart">
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">📅 予定 終了日</label>
+            <input type="date" class="modal-input" id="finp-planEnd">
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">✅ 実績 開始日</label>
+            <input type="date" class="modal-input" id="finp-actualStart">
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">✅ 実績 終了日</label>
+            <input type="date" class="modal-input" id="finp-actualEnd">
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-section-divider">🏭 エージング</div>
+      <div class="modal-grid">
+        <div class="modal-field">
+          <label class="modal-label">エージング 開始日</label>
+          <input type="date" class="modal-input" id="finp-agingStart">
+        </div>
+        <div class="modal-field">
+          <label class="modal-label">エージング 終了日</label>
+          <input type="date" class="modal-input" id="finp-agingEnd">
+        </div>
+      </div>
+
+      <div class="modal-section-divider">🔍 検査</div>
+      <div class="modal-grid">
+        <div class="modal-field">
+          <label class="modal-label">検査 開始日</label>
+          <input type="date" class="modal-input" id="finp-inspectStart">
+        </div>
+        <div class="modal-field">
+          <label class="modal-label">検査 終了日</label>
+          <input type="date" class="modal-input" id="finp-inspectEnd">
+        </div>
+      </div>
+
+      <div class="modal-section-divider">🚢 出荷</div>
+      <div class="modal-grid">
+        <div class="modal-field">
+          <label class="modal-label">出荷日</label>
+          <input type="date" class="modal-input" id="finp-shipDate">
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="modal-btn-cancel" onclick="closeFieldModalDirect()">キャンセル</button>
+      <button class="modal-btn-save" onclick="saveField()">保存</button>
+    </div>
+  </div>
+</div>
+
+
+<div class="tooltip" id="tooltip">
+  <div class="tooltip-title" id="ttTitle"></div>
+  <div class="tooltip-row"><span>期間</span><span id="ttRange"></span></div>
+  <div class="tooltip-row"><span>タイプ</span><span id="ttType"></span></div>
+  <div id="ttHint" style="font-size:9px;color:var(--text-muted);margin-top:4px;text-align:center"></div>
+</div>
+
+<script>
+// ===================== DATA =====================
+const CELL_W = 18;
+const ROW_H = 56;
+const HEADER_H = 72;
+
+// Japanese holidays 2026
+const JP_HOLIDAYS = {
+  '2026-01-01': '元旦',
+  '2026-01-12': '成人',
+  '2026-02-11': '建国',
+  '2026-02-23': '天皇',
+  '2026-03-20': '春分',
+  '2026-04-29': 'みどり',
+  '2026-05-03': '憲法',
+  '2026-05-04': 'みどり',
+  '2026-05-05': 'こども',
+  '2026-07-20': '海の日',
+  '2026-08-11': '山の日',
+  '2026-09-21': '敬老',
+  '2026-09-23': '秋分',
+  '2026-10-12': '体育',
+  '2026-11-03': '文化',
+  '2026-11-23': '勤労',
+};
+
+// Chinese holidays 2026
+const CN_HOLIDAYS = {
+  '2026-01-01': '元旦',
+  '2026-01-28': '春節',
+  '2026-01-29': '春節',
+  '2026-01-30': '春節',
+  '2026-01-31': '春節',
+  '2026-02-01': '春節',
+  '2026-02-02': '春節',
+  '2026-02-03': '春節',
+  '2026-04-05': '清明',
+  '2026-05-01': '労働',
+  '2026-05-02': '労働',
+  '2026-05-03': '労働',
+  '2026-06-19': '端午',
+  '2026-10-01': '国慶',
+  '2026-10-02': '国慶',
+  '2026-10-03': '国慶',
+  '2026-10-04': '国慶',
+  '2026-10-05': '国慶',
+  '2026-10-06': '国慶',
+  '2026-10-07': '国慶',
+};
+
+const WEEKDAYS = ['日','月','火','水','木','金','土'];
+
+let tasks = [
+  { id: 82, type: '計画生産', model: 'SOT-23', person: '朱', customer: '計画生産',
+    planStart: new Date(2026,0,5), planEnd: new Date(2026,0,10),
+    actualStart: new Date(2026,0,6), actualEnd: new Date(2026,0,11),
+    agingStart: new Date(2026,0,11), agingEnd: new Date(2026,0,13),
+    inspectStart: new Date(2026,0,14), inspectEnd: new Date(2026,0,14),
+    shipDate: new Date(2026,0,16), memo: '' },
+  { id: 83, type: 'APS', model: 'SOD233', person: '虞', customer: 'APS',
+    planStart: new Date(2026,0,15), planEnd: new Date(2026,0,25),
+    actualStart: new Date(2026,0,16), actualEnd: new Date(2026,0,24),
+    agingStart: new Date(2026,0,24), agingEnd: new Date(2026,0,26),
+    inspectStart: new Date(2026,0,27), inspectEnd: new Date(2026,0,27),
+    shipDate: new Date(2026,0,29), memo: '' },
+  { id: 84, type: 'QTJ', model: '試験型', person: '伊藤', customer: 'QTJ',
+    planStart: new Date(2026,0,28), planEnd: new Date(2026,1,5),
+    actualStart: new Date(2026,0,29), actualEnd: new Date(2026,1,6),
+    agingStart: null, agingEnd: null,
+    inspectStart: null, inspectEnd: null, shipDate: null, memo: '' },
+  { id: 85, type: '計画生産', model: 'SOT-23B', person: '未定', customer: '計画生産',
+    planStart: new Date(2026,1,1), planEnd: new Date(2026,1,8),
+    actualStart: null, actualEnd: null,
+    agingStart: null, agingEnd: null,
+    inspectStart: null, inspectEnd: null, shipDate: null, memo: '' },
+];
+const originalTasks = JSON.parse(JSON.stringify(tasks.map(t => ({
+  ...t,
+  planStart: t.planStart.getTime(), planEnd: t.planEnd.getTime(),
+  actualStart: t.actualStart ? t.actualStart.getTime() : null,
+  actualEnd: t.actualEnd ? t.actualEnd.getTime() : null,
+  agingStart: t.agingStart ? t.agingStart.getTime() : null,
+  agingEnd: t.agingEnd ? t.agingEnd.getTime() : null,
+  inspectStart: t.inspectStart ? t.inspectStart.getTime() : null,
+  inspectEnd: t.inspectEnd ? t.inspectEnd.getTime() : null,
+  shipDate: t.shipDate ? t.shipDate.getTime() : null,
+}))));
+
+let viewStart = new Date(2026,0,1);
+let periodMonths = 1;
+let showPlan = true;
+let showActual = true;
+let showMemo = true;
+let showAging = true;
+let showInspect = true;
+let showShip = true;
+let selectedTaskId = 82;
+let scrollXOffset = 0;
+let filteredIds = tasks.map(t => t.id);
+
+// ===================== HELPERS =====================
+function dateKey(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function addDays(d, n) {
+  const r = new Date(d); r.setDate(r.getDate()+n); return r;
+}
+function diffDays(a, b) {
+  return Math.round((b-a)/(1000*60*60*24));
+}
+function fmtDate(d) {
+  if (!d) return '未着手';
+  return `${d.getMonth()+1}/${d.getDate()}`;
+}
+function getDaysInView() {
+  const end = new Date(viewStart);
+  end.setMonth(end.getMonth() + periodMonths);
+  const days = [];
+  let cur = new Date(viewStart);
+  while (cur < end) { days.push(new Date(cur)); cur.setDate(cur.getDate()+1); }
+  return days;
+}
+
+// ===================== RENDER =====================
+function render() {
+  const days = getDaysInView();
+  const today = new Date(2026,3,22); // simulation
+
+  // Month band
+  const monthBand = document.getElementById('monthBand');
+  const months = {};
+  days.forEach((d,i) => {
+    const k = `${d.getFullYear()}年${d.getMonth()+1}月`;
+    if (!months[k]) months[k] = 0;
+    months[k]++;
+  });
+  monthBand.innerHTML = Object.entries(months).map(([k,cnt]) =>
+    `<span class="month-name" style="min-width:${cnt*CELL_W}px">${k}</span>`
+  ).join('');
+
+  // Date header
+  const dh = document.getElementById('dateHeader');
+  dh.innerHTML = '';
+  days.forEach(d => {
+    const key = dateKey(d);
+    const isWE = d.getDay()===0 || d.getDay()===6;
+    const jpH = JP_HOLIDAYS[key];
+    const cnH = CN_HOLIDAYS[key];
+    const isToday = key === dateKey(today);
+    let cls = 'day-col';
+    if (jpH && cnH) cls += ' holiday-jp';
+    else if (jpH) cls += ' holiday-jp';
+    else if (cnH) cls += ' holiday-cn';
+    else if (isWE) cls += ' weekend';
+    if (isToday) cls += ' today';
+
+    let badge = '';
+    if (jpH && cnH) badge = `<div class="holiday-badge both">🇯🇵${jpH}<br>🇨🇳${cnH}</div>`;
+    else if (jpH) badge = `<div class="holiday-badge jp">🇯🇵${jpH}</div>`;
+    else if (cnH) badge = `<div class="holiday-badge cn">🇨🇳${cnH}</div>`;
+
+    dh.innerHTML += `<div class="${cls}">
+      <div class="day-num">${d.getDate()}</div>
+      <div class="day-weekday">${WEEKDAYS[d.getDay()]}</div>
+      ${badge}
+    </div>`;
+  });
+
+  // Task labels + grid rows
+  const visTasks = tasks.filter(t => filteredIds.includes(t.id));
+  const labelCol = document.getElementById('taskLabels');
+  labelCol.innerHTML = '';
+  const gridRows = document.getElementById('gridRows');
+  // keep bar container
+  const barContainer = document.getElementById('barContainer');
+  gridRows.innerHTML = '';
+  gridRows.appendChild(barContainer);
+  barContainer.innerHTML = '';
+
+  visTasks.forEach((t, ri) => {
+    // label
+    const lbl = document.createElement('div');
+    lbl.className = 'task-label' + (t.id === selectedTaskId ? ' selected' : '');
+    lbl.innerHTML = `
+      <div class="task-label-id">${t.id}</div>
+      <div class="task-label-row"><span class="task-label-key">品種</span><span class="task-label-val">${t.model}</span></div>
+      <div class="task-label-row"><span class="task-label-key">顧客</span><span class="task-label-val">${t.customer}</span></div>
+      <div class="task-label-row"><span class="task-label-key">担当</span><span class="task-label-val">${t.person}</span></div>`;
+    lbl.onclick = () => { selectedTaskId = t.id; document.getElementById('editTaskSel').value = t.id; render(); };
+    labelCol.appendChild(lbl);
+
+    // grid row
+    const row = document.createElement('div');
+    row.className = 'grid-row';
+    days.forEach(d => {
+      const key = dateKey(d);
+      const isWE = d.getDay()===0 || d.getDay()===6;
+      const jpH = JP_HOLIDAYS[key];
+      const cnH = CN_HOLIDAYS[key];
+      const isToday = key === dateKey(today);
+      let cls = 'grid-cell';
+      if (jpH) cls += ' holiday-jp';
+      else if (cnH) cls += ' holiday-cn';
+      else if (isWE) cls += ' weekend';
+      if (isToday) cls += ' today';
+      const cell = document.createElement('div');
+      cell.className = cls;
+      row.appendChild(cell);
+    });
+    gridRows.insertBefore(row, barContainer);
+
+    // bars
+    const barTop = ri * ROW_H;
+
+    if (showPlan && t.planStart && t.planEnd) {
+      const s = diffDays(viewStart, t.planStart);
+      const len = diffDays(t.planStart, t.planEnd) + 1;
+      if (s < days.length && s + len > 0)
+        renderBar(t, 'plan', Math.max(0,s), len, barTop, barContainer, days.length);
+    }
+    if (showActual && t.actualStart && t.actualEnd) {
+      const s = diffDays(viewStart, t.actualStart);
+      const len = diffDays(t.actualStart, t.actualEnd) + 1;
+      if (s < days.length && s + len > 0)
+        renderBar(t, 'actual', Math.max(0,s), len, barTop, barContainer, days.length);
+    }
+    if (showAging && t.agingStart && t.agingEnd) {
+      const s = diffDays(viewStart, t.agingStart);
+      const e = diffDays(viewStart, t.agingEnd);
+      for (let d = s; d <= e; d++) {
+        if (d >= 0 && d < days.length) {
+          renderAgingIcon(t, d, barTop, barContainer, d === s, d === e);
+        }
+      }
+    }
+    // 検査：期間の各日に🔍アイコン1つ
+    if (showInspect && t.inspectStart && t.inspectEnd) {
+      const s = diffDays(viewStart, t.inspectStart);
+      const e = diffDays(viewStart, t.inspectEnd);
+      const total = diffDays(t.inspectStart, t.inspectEnd); // 期間の長さ
+      for (let d = s; d <= e; d++) {
+        if (d >= 0 && d < days.length) {
+          const isFirst = (d === s);
+          const isLast  = (d === e);
+          renderInspectIcon(t, d, barTop, barContainer, isFirst, isLast);
+        }
+      }
+    }
+    // 出荷：単一ドラッグ可能アイコン
+    if (showShip && t.shipDate) {
+      const s = diffDays(viewStart, t.shipDate);
+      if (s >= 0 && s < days.length)
+        renderShipMarker(t, s, barTop, barContainer);
+    }
+  });
+
+  // bar container height
+  barContainer.style.height = (visTasks.length * ROW_H) + 'px';
+
+  // today line
+  const todayOffset = diffDays(viewStart, today);
+  const todayLine = document.getElementById('todayLine');
+  if (todayOffset >= 0 && todayOffset < days.length) {
+    todayLine.style.left = (todayOffset * CELL_W + CELL_W/2) + 'px';
+    todayLine.style.height = (HEADER_H + visTasks.length * ROW_H) + 'px';
+    todayLine.style.top = '0px';
+    todayLine.style.display = 'block';
+  } else {
+    todayLine.style.display = 'none';
+  }
+
+  // table
+  renderTable(visTasks);
+  // header
+  document.getElementById('hdr-tasks').textContent = `1–${visTasks.length} / ${tasks.length}`;
+  // sync vertical scroll position
+  setTimeout(() => { applyVScroll(); updateVScroll(); }, 0);
+}
+
+function barTopOffset(type) {
+  return {
+    plan:   2,
+    actual: 12,
+    aging:  24,
+    inspect: 37,
+    ship:    37,
+  }[type] ?? 2;
+}
+
+// ダイボンダーSVG
+const DIEBONDER_SVG = `<svg viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg" width="13" height="13" style="pointer-events:none">
+  <rect x="1" y="13" width="16" height="3" rx="0.5" fill="#fb923c"/>
+  <rect x="3" y="10" width="12" height="2.5" rx="0.3" fill="#fbbf24"/>
+  <rect x="7.5" y="7.5" width="3" height="2.5" rx="0.2" fill="#fff" opacity="0.95"/>
+  <rect x="8.3" y="2" width="1.4" height="6" rx="0.3" fill="#fb923c"/>
+  <rect x="2" y="2" width="14" height="1.6" rx="0.4" fill="#fb923c"/>
+  <polygon points="8.5,7 9.5,7 9,8.5" fill="#fff" opacity="0.9"/>
+  <rect x="2" y="3.6" width="1.2" height="9" rx="0.3" fill="#fb923c" opacity="0.7"/>
+  <rect x="14.8" y="3.6" width="1.2" height="9" rx="0.3" fill="#fb923c" opacity="0.7"/>
+</svg>`;
+
+// エージングアイコン：各日にダイボンダーアイコンを1つ表示
+function renderAgingIcon(task, col, rowTop, container, isFirst, isLast) {
+  const el = document.createElement('div');
+  el.className = 'gantt-marker aging-icon';
+  el.style.left = (col * CELL_W + 1) + 'px';
+  el.style.top  = (rowTop + barTopOffset('aging')) + 'px';
+  el.innerHTML  = DIEBONDER_SVG;
+
+  el.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault(); e.stopPropagation();
+    const origS = new Date(task.agingStart);
+    const origE = new Date(task.agingEnd);
+    const startX = e.clientX;
+    el.classList.add('dragging');
+    hideTooltip();
+    const onMove = (e) => {
+      const d = Math.round((e.clientX - startX) / CELL_W);
+      if (isFirst && isLast) {
+        if (d >= 0) task.agingEnd   = addDays(origE, d);
+        else        task.agingStart = addDays(origS, d);
+      } else if (isFirst && !isLast) {
+        const newS = addDays(origS, d);
+        if (diffDays(newS, origE) >= 0) task.agingStart = newS;
+      } else if (isLast && !isFirst) {
+        const newE = addDays(origE, d);
+        if (diffDays(origS, newE) >= 0) task.agingEnd = newE;
+      } else {
+        task.agingStart = addDays(origS, d);
+        task.agingEnd   = addDays(origE, d);
+      }
+      render();
+    };
+    const onUp = () => {
+      el.classList.remove('dragging');
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+
+  el.addEventListener('mouseenter', (e) => {
+    const tt = document.getElementById('tooltip');
+    document.getElementById('ttTitle').textContent = `${task.id}: ${task.model}`;
+    document.getElementById('ttRange').textContent = `${fmtDate(task.agingStart)} 〜 ${fmtDate(task.agingEnd)}`;
+    document.getElementById('ttType').textContent  = 'エージング';
+    const hint = document.getElementById('ttHint');
+    if (hint) hint.textContent = isFirst && !isLast ? '← 開始日変更' : isLast && !isFirst ? '終了日変更 →' : '← 移動 →';
+    tt.classList.add('visible');
+    moveTooltip(e);
+  });
+  el.addEventListener('mousemove', moveTooltip);
+  el.addEventListener('mouseleave', hideTooltip);
+  container.appendChild(el);
+}
+
+// 検査アイコン：各日に🔍を1つ表示
+// 最初のアイコン → inspectStart をドラッグ（期間を左から伸縮）
+// 最後のアイコン → inspectEnd をドラッグ（期間を右から伸縮・アイコン増減）
+// 中間のアイコン → 期間ごと移動
+function renderInspectIcon(task, col, rowTop, container, isFirst, isLast) {
+  const el = document.createElement('div');
+  el.className = 'gantt-marker inspect';
+  if (isFirst) el.classList.add('inspect-first');
+  if (isLast)  el.classList.add('inspect-last');
+  el.style.left = (col * CELL_W + 1) + 'px';
+  el.style.top  = (rowTop + barTopOffset('inspect')) + 'px';
+  el.innerHTML  = '<div class="marker-label">🔍</div>';
+
+  el.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault(); e.stopPropagation();
+    const origS = new Date(task.inspectStart);
+    const origE = new Date(task.inspectEnd);
+    const startX = e.clientX;
+    el.classList.add('dragging');
+    hideTooltip();
+
+    const onMove = (e) => {
+      const d = Math.round((e.clientX - startX) / CELL_W);
+      if (isFirst && isLast) {
+        // 1アイコンのみ：右ドラッグ→終了日延長（アイコン増加）、左ドラッグ→開始日を前に移動
+        if (d >= 0) {
+          task.inspectEnd = addDays(origE, d);
+        } else {
+          task.inspectStart = addDays(origS, d);
+        }
+      } else if (isFirst && !isLast) {
+        // 先頭アイコン：開始日を変更
+        const newS = addDays(origS, d);
+        if (diffDays(newS, origE) >= 0) task.inspectStart = newS;
+      } else if (isLast && !isFirst) {
+        // 末尾アイコン：終了日を変更（アイコン増減）
+        const newE = addDays(origE, d);
+        if (diffDays(origS, newE) >= 0) task.inspectEnd = newE;
+      } else {
+        // 中間アイコン：期間ごと移動
+        task.inspectStart = addDays(origS, d);
+        task.inspectEnd   = addDays(origE, d);
+      }
+      render();
+    };
+    const onUp = () => {
+      el.classList.remove('dragging');
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+
+  el.addEventListener('mouseenter', (e) => {
+    const tt = document.getElementById('tooltip');
+    document.getElementById('ttTitle').textContent = `${task.id}: ${task.model}`;
+    document.getElementById('ttRange').textContent = `${fmtDate(task.inspectStart)} 〜 ${fmtDate(task.inspectEnd)}`;
+    document.getElementById('ttType').textContent  = '検査';
+    const hint = document.getElementById('ttHint');
+    if (hint) {
+      if (isFirst && !isLast) hint.textContent = '← ドラッグで開始日変更';
+      else if (isLast && !isFirst) hint.textContent = 'ドラッグで終了日変更 →';
+      else hint.textContent = '← ドラッグで移動 →';
+    }
+    tt.classList.add('visible');
+    moveTooltip(e);
+  });
+  el.addEventListener('mousemove', moveTooltip);
+  el.addEventListener('mouseleave', hideTooltip);
+  container.appendChild(el);
+}
+
+// 出荷アイコン：単一🚢、ドラッグで1日単位移動
+function renderShipMarker(task, col, rowTop, container) {
+  const el = document.createElement('div');
+  el.className = 'gantt-marker ship';
+  el.style.left = (col * CELL_W + 1) + 'px';
+  el.style.top  = (rowTop + barTopOffset('ship')) + 'px';
+  el.innerHTML  = '<div class="marker-label">🚢</div>';
+
+  el.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault(); e.stopPropagation();
+    const origDate = new Date(task.shipDate);
+    const startX   = e.clientX;
+    el.classList.add('dragging');
+    hideTooltip();
+    const onMove = (e) => {
+      const d = Math.round((e.clientX - startX) / CELL_W);
+      task.shipDate = addDays(origDate, d);
+      render();
+    };
+    const onUp = () => {
+      el.classList.remove('dragging');
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+
+  el.addEventListener('mouseenter', (e) => {
+    const tt = document.getElementById('tooltip');
+    document.getElementById('ttTitle').textContent = `${task.id}: ${task.model}`;
+    document.getElementById('ttRange').textContent = fmtDate(task.shipDate);
+    document.getElementById('ttType').textContent  = '出荷日';
+    const hint = document.getElementById('ttHint');
+    if (hint) hint.textContent = '← ドラッグで移動 →';
+    tt.classList.add('visible');
+    moveTooltip(e);
+  });
+  el.addEventListener('mousemove', moveTooltip);
+  el.addEventListener('mouseleave', hideTooltip);
+  container.appendChild(el);
+}
+
+function renderBar(task, type, startCol, lenCols, rowTop, container, totalCols) {
+  const bar = document.createElement('div');
+  bar.className = `gantt-bar ${type}`;
+  const clampedStart = Math.max(0, startCol);
+  const clampedLen = Math.min(lenCols, totalCols - clampedStart);
+  bar.style.left = (clampedStart * CELL_W) + 'px';
+  bar.style.width = (clampedLen * CELL_W - 2) + 'px';
+  bar.style.top = (rowTop + barTopOffset(type)) + 'px';
+
+  // Die bonder icon on aging bar left
+  if (type === 'aging') {
+    const ico = document.createElement('div');
+    ico.className = 'bar-diebonder-icon';
+    ico.innerHTML = `<svg viewBox="0 0 20 12" xmlns="http://www.w3.org/2000/svg" width="20" height="12">
+      <!-- Base / stage -->
+      <rect x="1" y="8" width="18" height="2.5" rx="0.5" fill="#fb923c" opacity="0.9"/>
+      <!-- Work table -->
+      <rect x="4" y="6.5" width="12" height="1.8" rx="0.3" fill="#fbbf24" opacity="0.85"/>
+      <!-- Die (chip on stage) -->
+      <rect x="8.5" y="5.2" width="3" height="1.5" rx="0.2" fill="#fff" opacity="0.95"/>
+      <!-- Vertical arm -->
+      <rect x="9.2" y="1" width="1.6" height="4.5" rx="0.3" fill="#fb923c" opacity="0.9"/>
+      <!-- Pick head horizontal beam -->
+      <rect x="3" y="1" width="14" height="1.4" rx="0.4" fill="#fb923c" opacity="0.9"/>
+      <!-- Pick nozzle tip -->
+      <polygon points="9.5,4.5 10.5,4.5 10,5.5" fill="#fff" opacity="0.9"/>
+      <!-- Left support pillar -->
+      <rect x="2.5" y="2.4" width="1.2" height="6" rx="0.3" fill="#fb923c" opacity="0.7"/>
+      <!-- Right support pillar -->
+      <rect x="16.3" y="2.4" width="1.2" height="6" rx="0.3" fill="#fb923c" opacity="0.7"/>
+    </svg>`;
+    bar.appendChild(ico);
+  }
+
+  const lbl = document.createElement('div');
+  lbl.className = 'bar-label';
+  if (type === 'plan')   lbl.textContent = `${fmtDate(task.planStart)}〜${fmtDate(task.planEnd)}`;
+  if (type === 'actual') lbl.textContent = `${fmtDate(task.actualStart)}〜${fmtDate(task.actualEnd)}`;
+  bar.appendChild(lbl);
+
+  // memo label on plan bar
+  if (type === 'plan' && showMemo && task.memo) {
+    const memoLbl = document.createElement('div');
+    memoLbl.className = 'bar-memo-label';
+    memoLbl.textContent = '📝 ' + task.memo;
+    memoLbl.style.left = ((clampedStart + clampedLen) * CELL_W + 4) + 'px';
+    memoLbl.style.top = (rowTop + 2) + 'px';
+    container.appendChild(memoLbl);
+  }
+
+  // Resize handles (not for aging — draggable only)
+  const rL = document.createElement('div'); rL.className = 'bar-resize-left';
+  const rR = document.createElement('div'); rR.className = 'bar-resize-right';
+  bar.appendChild(rL); bar.appendChild(rR);
+
+  makeDraggable(bar, task, type, rL, rR);
+
+  bar.addEventListener('mouseenter', (e) => showTooltip(e, task, type));
+  bar.addEventListener('mousemove', moveTooltip);
+  bar.addEventListener('mouseleave', hideTooltip);
+
+  container.appendChild(bar);
+}
+
+// ===================== DRAG =====================
+function makeDraggable(bar, task, type, rL, rR) {
+  let dragState = null;
+
+  function getStartEnd() {
+    if (type === 'plan')   return { s: task.planStart,  e: task.planEnd };
+    if (type === 'actual') return { s: task.actualStart, e: task.actualEnd };
+    if (type === 'aging')  return { s: task.agingStart,  e: task.agingEnd };
+    return { s: task.planStart, e: task.planEnd };
+  }
+  function setStartEnd(s, e) {
+    if (type === 'plan')   { task.planStart = s;   task.planEnd = e; }
+    if (type === 'actual') { task.actualStart = s; task.actualEnd = e; }
+    if (type === 'aging')  { task.agingStart = s;  task.agingEnd = e; }
+  }
+
+  function onMouseDown(e, mode) {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const { s, e: end } = getStartEnd();
+    dragState = {
+      mode, // 'move', 'resizeL', 'resizeR'
+      startX: e.clientX,
+      origStart: new Date(s),
+      origEnd: new Date(end),
+    };
+    bar.classList.add('dragging');
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  }
+
+  bar.addEventListener('mousedown', (e) => {
+    if (e.target === rL || e.target === rR) return;
+    onMouseDown(e, 'move');
+  });
+  rL.addEventListener('mousedown', (e) => onMouseDown(e, 'resizeL'));
+  rR.addEventListener('mousedown', (e) => onMouseDown(e, 'resizeR'));
+
+  function onMouseMove(e) {
+    if (!dragState) return;
+    const dx = e.clientX - dragState.startX;
+    const dayDelta = Math.round(dx / CELL_W);
+    const { origStart, origEnd, mode } = dragState;
+
+    if (mode === 'move') {
+      const newS = addDays(origStart, dayDelta);
+      const newE = addDays(origEnd, dayDelta);
+      setStartEnd(newS, newE);
+    } else if (mode === 'resizeL') {
+      const newS = addDays(origStart, dayDelta);
+      if (diffDays(newS, origEnd) >= 1) setStartEnd(newS, origEnd);
+    } else if (mode === 'resizeR') {
+      const newE = addDays(origEnd, dayDelta);
+      if (diffDays(origStart, newE) >= 1) setStartEnd(origStart, newE);
+    }
+    render();
+  }
+
+  function onMouseUp() {
+    dragState = null;
+    bar.classList.remove('dragging');
+    document.removeEventListener('mousemove', onMouseMove);
+    document.removeEventListener('mouseup', onMouseUp);
+  }
+}
+
+// ===================== TOOLTIP =====================
+function showTooltip(e, task, type) {
+  const tt = document.getElementById('tooltip');
+  const typeLabel = { plan:'予定', actual:'実績', aging:'エージング', inspect:'検査', ship:'出荷日' };
+  document.getElementById('ttTitle').textContent = `${task.id}: ${task.model}`;
+  let range = '';
+  if (type === 'plan')   range = `${fmtDate(task.planStart)} 〜 ${fmtDate(task.planEnd)}`;
+  if (type === 'actual') range = `${fmtDate(task.actualStart)} 〜 ${fmtDate(task.actualEnd)}`;
+  if (type === 'aging')  range = `${fmtDate(task.agingStart)} 〜 ${fmtDate(task.agingEnd)}`;
+  if (type === 'inspect') range = `${fmtDate(task.inspectStart)} 〜 ${fmtDate(task.inspectEnd)}`;
+  if (type === 'ship')   range = fmtDate(task.shipDate);
+  document.getElementById('ttRange').textContent = range;
+  document.getElementById('ttType').textContent = typeLabel[type] ?? type;
+  const hint = document.getElementById('ttHint');
+  if (hint) hint.textContent = '← ドラッグで変更 →';
+  tt.classList.add('visible');
+  moveTooltip(e);
+}
+function moveTooltip(e) {
+  const tt = document.getElementById('tooltip');
+  tt.style.left = (e.clientX+12)+'px';
+  tt.style.top = (e.clientY-8)+'px';
+}
+function hideTooltip() {
+  document.getElementById('tooltip').classList.remove('visible');
+}
+
+// ===================== TABLE =====================
+function renderTable(visTasks) {
+  const tbody = document.getElementById('tableBody');
+  tbody.innerHTML = '';
+  visTasks.forEach(t => {
+    const tr = document.createElement('tr');
+    const aStatus = t.actualStart ? `<span class="badge badge-actual">${fmtDate(t.actualStart)} – ${fmtDate(t.actualEnd)}</span>`
+      : `<span class="badge badge-pending">未着手</span>`;
+    const memoHtml = t.memo
+      ? `<span class="memo-text" title="${t.memo.replace(/"/g,'&quot;')}">${t.memo}</span>`
+      : `<span class="memo-empty">―</span>`;
+    const agingHtml   = t.agingStart   ? `<span class="badge" style="background:rgba(251,146,60,0.15);color:#fb923c">${fmtDate(t.agingStart)}–${fmtDate(t.agingEnd)}</span>`   : `<span class="memo-empty">―</span>`;
+    const inspectHtml = t.inspectStart ? `<span class="badge" style="background:rgba(167,139,250,0.15);color:#a78bfa">${fmtDate(t.inspectStart)}–${fmtDate(t.inspectEnd)}</span>` : `<span class="memo-empty">―</span>`;
+    const shipHtml    = t.shipDate     ? `<span class="badge" style="background:rgba(251,215,0,0.15);color:#ffd700">${fmtDate(t.shipDate)}</span>`                               : `<span class="memo-empty">―</span>`;
+
+    tr.innerHTML = `
+      <td class="td-id">${t.id}</td>
+      <td class="td-type">${t.customer}</td>
+      <td>${t.model}</td>
+      <td>${t.person}
+        <button class="edit-btn always-visible" onclick="openFieldModal(${t.id})" title="編集">✏️</button>
+      </td>
+      <td><span class="badge badge-plan">${fmtDate(t.planStart)} – ${fmtDate(t.planEnd)}</span></td>
+      <td>${aStatus}</td>
+      <td>${agingHtml}</td>
+      <td>${inspectHtml}</td>
+      <td>${shipHtml}</td>
+      <td class="td-memo">${memoHtml}<button class="memo-btn" onclick="openMemoModal(${t.id})">✏️</button></td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+// ===================== CONTROLS =====================
+function onScrollX(el) {}
+function onScrollY(el) {}
+function setPeriodFromSel(sel) {
+  periodMonths = parseInt(sel.value);
+  render();
+}
+function toggleVis(type) {
+  const idMap = { plan:'togPlan', actual:'togActual', memo:'togMemo', aging:'togAging', inspect:'togInspect', ship:'togShip' };
+  const el = document.getElementById(idMap[type]);
+  el.classList.toggle('on');
+  const on = el.classList.contains('on');
+  if (type==='plan')    showPlan    = on;
+  else if (type==='actual')  showActual  = on;
+  else if (type==='memo')    showMemo    = on;
+  else if (type==='aging')   showAging   = on;
+  else if (type==='inspect') showInspect = on;
+  else if (type==='ship')    showShip    = on;
+  render();
+}
+function selectTask(id) {
+  selectedTaskId = parseInt(id);
+  render();
+}
+function applyFilters() { applyAllFilters(); }
+function resetAll() {
+  tasks = originalTasks.map(t => ({
+    ...t,
+    planStart: new Date(t.planStart), planEnd: new Date(t.planEnd),
+    actualStart: t.actualStart ? new Date(t.actualStart) : null,
+    actualEnd: t.actualEnd ? new Date(t.actualEnd) : null,
+    agingStart: t.agingStart ? new Date(t.agingStart) : null,
+    agingEnd: t.agingEnd ? new Date(t.agingEnd) : null,
+    inspectStart: t.inspectStart ? new Date(t.inspectStart) : null,
+    inspectEnd: t.inspectEnd ? new Date(t.inspectEnd) : null,
+    shipDate: t.shipDate ? new Date(t.shipDate) : null,
+  }));
+  filteredIds = tasks.map(t => t.id);
+  periodMonths = 1;
+  showPlan = true; showActual = true; showMemo = true;
+  showAging = true; showInspect = true; showShip = true;
+  ['togPlan','togActual','togMemo','togAging','togInspect','togShip'].forEach(id => {
+    document.getElementById(id).classList.add('on');
+  });
+  document.querySelectorAll('#periodBtns .btn').forEach((b,i) => b.classList.toggle('active', i===0));
+  document.getElementById('periodSel').value = '1';
+  document.getElementById('chartScroll').scrollLeft = 0;
+  document.getElementById('filterCustomer').value = '全て';
+  document.getElementById('filterPerson').value = '全て';
+  document.getElementById('filterModel').value = '全て';
+  vScrollOffset = 0;
+  render();
+  updateVScroll();
+}
+
+// ===================== VERTICAL SCROLL =====================
+const VIEWPORT_ROWS = 6; // visible rows in chart
+let vScrollOffset = 0;   // row offset (top row index)
+
+function getMaxVScroll() {
+  return Math.max(0, filteredIds.length - VIEWPORT_ROWS);
+}
+
+function applyVScroll() {
+  const px = vScrollOffset * ROW_H;
+  const lv = document.getElementById('labelViewport');
+  const rv = document.getElementById('rowsViewport');
+  if (lv) lv.scrollTop = px;
+  if (rv) rv.scrollTop = px;
+}
+
+function updateVScroll() {
+  const track = document.getElementById('vscrollTrack');
+  const thumb = document.getElementById('vscrollThumb');
+  if (!track || !thumb) return;
+
+  const total = filteredIds.length;
+  const visible = Math.min(VIEWPORT_ROWS, total);
+  const max = getMaxVScroll();
+
+  if (max <= 0) {
+    thumb.style.height = '100%';
+    thumb.style.top = '0%';
+    return;
+  }
+
+  const trackH = track.clientHeight;
+  const thumbH = Math.max(20, Math.floor((visible / total) * trackH));
+  const thumbTop = Math.floor((vScrollOffset / max) * (trackH - thumbH));
+  thumb.style.height = thumbH + 'px';
+  thumb.style.top = thumbTop + 'px';
+}
+
+function scrollVBy(delta) {
+  const max = getMaxVScroll();
+  vScrollOffset = Math.max(0, Math.min(max, vScrollOffset + delta));
+  applyVScroll();
+  updateVScroll();
+}
+
+function initVScroll() {
+  const track = document.getElementById('vscrollTrack');
+  const thumb = document.getElementById('vscrollThumb');
+  const up    = document.getElementById('vscrollUp');
+  const down  = document.getElementById('vscrollDown');
+  const chart = document.getElementById('chartScroll');
+
+  up.addEventListener('click', () => scrollVBy(-1));
+  down.addEventListener('click', () => scrollVBy(1));
+
+  // click on track (page scroll)
+  track.addEventListener('click', (e) => {
+    if (e.target === thumb) return;
+    const rect = track.getBoundingClientRect();
+    const rel = (e.clientY - rect.top) / rect.height;
+    vScrollOffset = Math.round(rel * getMaxVScroll());
+    applyVScroll();
+    updateVScroll();
+  });
+
+  // drag thumb
+  let dragStartY = 0, dragStartOffset = 0;
+  thumb.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    dragStartY = e.clientY;
+    dragStartOffset = vScrollOffset;
+    thumb.classList.add('dragging');
+    const onMove = (e) => {
+      const trackH = track.clientHeight;
+      const thumbH = thumb.clientHeight;
+      const dy = e.clientY - dragStartY;
+      const ratio = dy / (trackH - thumbH);
+      vScrollOffset = Math.max(0, Math.min(getMaxVScroll(), Math.round(dragStartOffset + ratio * getMaxVScroll())));
+      applyVScroll();
+      updateVScroll();
+    };
+    const onUp = () => {
+      thumb.classList.remove('dragging');
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+
+  // mouse wheel on chart area
+  chart.addEventListener('wheel', (e) => {
+    if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+      e.preventDefault();
+      scrollVBy(e.deltaY > 0 ? 1 : -1);
+    }
+  }, { passive: false });
+}
+
+// ===================== SORT =====================
+let sortKey = 'id';
+let sortDir = 'asc';
+
+function sortTasks() {
+  tasks.sort((a, b) => {
+    let va = sortKey === 'id' ? a.id : String(a[sortKey]);
+    let vb = sortKey === 'id' ? b.id : String(b[sortKey]);
+    if (sortKey === 'id') return sortDir === 'asc' ? va - vb : vb - va;
+    const cmp = va.localeCompare(vb, 'ja');
+    return sortDir === 'asc' ? cmp : -cmp;
+  });
+}
+
+function setSortKey(key) {
+  if (sortKey === key) {
+    sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    sortKey = key; sortDir = 'asc';
+  }
+  // ボタンスタイル更新
+  ['id','model','customer','person'].forEach(k => {
+    const btn = document.getElementById('sort-' + k);
+    if (btn) { btn.className = 'sort-btn' + (sortKey === k ? ' ' + sortDir : ''); }
+  });
+  sortTasks();
+  filteredIds = tasks.map(t => t.id);
+  render();
+}
+
+// ===================== EXCEL COLUMN FILTER =====================
+let colFilterState = {}; // { id: Set, customer: Set, model: Set, person: Set }
+let colFilterActive = {}; // { col: true/false }
+let currentFilterCol = null;
+
+const COL_GETTERS = {
+  id:       t => String(t.id),
+  customer: t => t.customer,
+  model:    t => t.model,
+  person:   t => t.person,
+};
+
+function initColFilter() {
+  // Initialize state: all values selected
+  ['id','customer','model','person'].forEach(col => {
+    colFilterState[col] = new Set(tasks.map(COL_GETTERS[col]));
+    colFilterActive[col] = false;
+  });
+
+  document.querySelectorAll('.th-filter').forEach(th => {
+    th.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const col = th.dataset.col;
+      toggleColFilterDropdown(col, th);
+    });
+  });
+
+  // Close dropdown on outside click
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('#colFilterDropdown') && !e.target.closest('.th-filter')) {
+      closeColFilterDropdown();
+    }
+  });
+}
+
+function toggleColFilterDropdown(col, th) {
+  const dd = document.getElementById('colFilterDropdown');
+  if (currentFilterCol === col && dd.classList.contains('open')) {
+    closeColFilterDropdown(); return;
+  }
+  currentFilterCol = col;
+  buildColFilterList(col);
+  // Position dropdown below the header cell
+  const rect = th.getBoundingClientRect();
+  const tableRect = document.querySelector('.table-section').getBoundingClientRect();
+  dd.style.top  = (rect.bottom - tableRect.top + document.querySelector('.table-section').scrollTop) + 'px';
+  dd.style.left = Math.max(0, rect.left - tableRect.left) + 'px';
+  dd.classList.add('open');
+  document.getElementById('colFilterSearch').value = '';
+  document.getElementById('colFilterSearch').focus();
+}
+
+function closeColFilterDropdown() {
+  document.getElementById('colFilterDropdown').classList.remove('open');
+  currentFilterCol = null;
+}
+
+function buildColFilterList(col) {
+  const list = document.getElementById('colFilterList');
+  const allVals = [...new Set(tasks.map(COL_GETTERS[col]))].sort((a,b) => {
+    return col === 'id' ? Number(a) - Number(b) : a.localeCompare(b, 'ja');
+  });
+  const selected = colFilterState[col];
+  list.innerHTML = '';
+  allVals.forEach(val => {
+    const item = document.createElement('label');
+    item.className = 'col-filter-item';
+    item.innerHTML = `<input type="checkbox" value="${val}" ${selected.has(val)?'checked':''}> ${val}`;
+    list.appendChild(item);
+  });
+}
+
+function filterDropdownList(query) {
+  const q = query.toLowerCase();
+  document.querySelectorAll('#colFilterList .col-filter-item').forEach(item => {
+    const text = item.textContent.toLowerCase();
+    item.style.display = text.includes(q) ? '' : 'none';
+  });
+}
+
+function colFilterSelectAll() {
+  document.querySelectorAll('#colFilterList .col-filter-item input').forEach(cb => {
+    if (cb.closest('.col-filter-item').style.display !== 'none') cb.checked = true;
+  });
+}
+function colFilterClearAll() {
+  document.querySelectorAll('#colFilterList .col-filter-item input').forEach(cb => {
+    if (cb.closest('.col-filter-item').style.display !== 'none') cb.checked = false;
+  });
+}
+
+function applyColFilter() {
+  if (!currentFilterCol) return;
+  const checked = new Set(
+    [...document.querySelectorAll('#colFilterList .col-filter-item input:checked')].map(cb => cb.value)
+  );
+  colFilterState[currentFilterCol] = checked;
+  colFilterActive[currentFilterCol] = checked.size < tasks.length;
+  // Update header indicator
+  document.querySelectorAll('.th-filter').forEach(th => {
+    th.classList.toggle('active-filter', colFilterActive[th.dataset.col]);
+  });
+  closeColFilterDropdown();
+  applyAllFilters();
+}
+
+function applyAllFilters() {
+  const cust   = document.getElementById('filterCustomer').value;
+  const person = document.getElementById('filterPerson').value;
+  const model  = document.getElementById('filterModel').value;
+  filteredIds = tasks
+    .filter(t =>
+      (cust   === '全て' || t.customer === cust) &&
+      (person === '全て' || t.person   === person) &&
+      (model  === '全て' || t.model    === model) &&
+      colFilterState.id.has(String(t.id)) &&
+      colFilterState.customer.has(t.customer) &&
+      colFilterState.model.has(t.model) &&
+      colFilterState.person.has(t.person))
+    .map(t => t.id);
+  vScrollOffset = 0;
+  render();
+  updateVScroll();
+}
+
+// ===================== ADD TASK MODAL =====================
+function openAddTaskModal() {
+  const usedIds = new Set(tasks.map(t => t.id));
+  const sel = document.getElementById('addTaskId');
+  sel.innerHTML = '';
+  for (let i = 1; i <= 9999; i++) {
+    if (!usedIds.has(i)) {
+      const o = document.createElement('option');
+      o.value = i; o.textContent = i;
+      sel.appendChild(o);
+    }
+  }
+  ['addModel','addCustomer','addPerson'].forEach(id => document.getElementById(id).value = '');
+  ['addPlanStart','addPlanEnd','addActualStart','addActualEnd',
+   'addAgingStart','addAgingEnd','addInspectStart','addInspectEnd','addShipDate']
+    .forEach(id => document.getElementById(id).value = '');
+  document.getElementById('addTaskError').style.display = 'none';
+  document.getElementById('addTaskModal').classList.add('visible');
+  setTimeout(() => document.getElementById('addModel').focus(), 50);
+}
+function closeAddTaskModal(e) {
+  if (e.target === document.getElementById('addTaskModal')) closeAddTaskModalDirect();
+}
+function closeAddTaskModalDirect() {
+  document.getElementById('addTaskModal').classList.remove('visible');
+}
+function saveAddTask() {
+  const id       = parseInt(document.getElementById('addTaskId').value);
+  const model    = document.getElementById('addModel').value.trim();
+  const customer = document.getElementById('addCustomer').value.trim();
+  const person   = document.getElementById('addPerson').value.trim();
+  const ps  = document.getElementById('addPlanStart').value;
+  const pe  = document.getElementById('addPlanEnd').value;
+  const as_ = document.getElementById('addActualStart').value;
+  const ae  = document.getElementById('addActualEnd').value;
+  const ags = document.getElementById('addAgingStart').value;
+  const age = document.getElementById('addAgingEnd').value;
+  const is_ = document.getElementById('addInspectStart').value;
+  const ie  = document.getElementById('addInspectEnd').value;
+  const sd  = document.getElementById('addShipDate').value;
+  const errEl = document.getElementById('addTaskError');
+  if (!model || !customer || !person) {
+    errEl.textContent = '品種・顧客名・担当者は必須です。'; errEl.style.display = 'block'; return;
+  }
+  if (ps && pe && ps > pe) { errEl.textContent = '予定終了日は開始日以降にしてください。'; errEl.style.display = 'block'; return; }
+  if (as_ && ae && as_ > ae) { errEl.textContent = '実績終了日は開始日以降にしてください。'; errEl.style.display = 'block'; return; }
+  if (ags && age && ags > age) { errEl.textContent = 'エージング終了日は開始日以降にしてください。'; errEl.style.display = 'block'; return; }
+  if (is_ && ie && is_ > ie) { errEl.textContent = '検査終了日は開始日以降にしてください。'; errEl.style.display = 'block'; return; }
+  const planStart = ps ? fromInputDate(ps) : new Date(viewStart);
+  const planEnd   = pe ? fromInputDate(pe) : addDays(new Date(viewStart), 6);
+  tasks.push({
+    id, type: customer, model, person, customer,
+    planStart, planEnd,
+    actualStart:  as_ ? fromInputDate(as_) : null,
+    actualEnd:    ae  ? fromInputDate(ae)  : null,
+    agingStart:   ags ? fromInputDate(ags) : null,
+    agingEnd:     age ? fromInputDate(age) : null,
+    inspectStart: is_ ? fromInputDate(is_) : null,
+    inspectEnd:   ie  ? fromInputDate(ie)  : null,
+    shipDate:     sd  ? fromInputDate(sd)  : null,
+    memo: ''
+  });
+  filteredIds = tasks.map(t => t.id);
+  sortTasks();
+  // colFilter stateを更新
+  ['id','customer','model','person'].forEach(col => {
+    colFilterState[col] = new Set(tasks.map(COL_GETTERS[col]));
+  });
+  rebuildEditTaskSel();
+  rebuildFilterSelects();
+  closeAddTaskModalDirect();
+  render();
+}
+function rebuildEditTaskSel() {
+  const sel = document.getElementById('editTaskSel');
+  sel.innerHTML = '';
+  tasks.forEach(t => { const o = document.createElement('option'); o.value = t.id; o.textContent = t.id; sel.appendChild(o); });
+  const last = tasks[tasks.length - 1];
+  sel.value = last.id; selectedTaskId = last.id;
+}
+function rebuildFilterSelects() {
+  const rebuild = (elId, arr) => {
+    const el = document.getElementById(elId); const cur = el.value; el.innerHTML = '';
+    arr.forEach(v => { const o = document.createElement('option'); o.value = v; o.textContent = v; el.appendChild(o); });
+    el.value = arr.includes(cur) ? cur : '全て';
+  };
+  rebuild('filterModel',    ['全て', ...new Set(tasks.map(t => t.model))]);
+  rebuild('filterCustomer', ['全て', ...new Set(tasks.map(t => t.customer))]);
+  rebuild('filterPerson',   ['全て', ...new Set(tasks.map(t => t.person))]);
+}
+
+// ===================== FIELD EDIT MODAL =====================
+let fieldEditId = null;
+function openFieldModal(taskId) {
+  const t = tasks.find(x => x.id === taskId);
+  if (!t) return;
+  fieldEditId = taskId;
+  document.getElementById('fieldModalTitle').textContent = 'タスク情報編集';
+  document.getElementById('fieldModalMeta').textContent  = `現在の値 → ID: ${t.id} ／ 品種: ${t.model} ／ 顧客: ${t.customer} ／ 担当: ${t.person}`;
+  document.getElementById('finp-id').value            = t.id;
+  document.getElementById('finp-model').value         = t.model;
+  document.getElementById('finp-customer').value      = t.customer;
+  document.getElementById('finp-person').value        = t.person;
+  document.getElementById('finp-planStart').value     = toInputDate(t.planStart);
+  document.getElementById('finp-planEnd').value       = toInputDate(t.planEnd);
+  document.getElementById('finp-actualStart').value   = toInputDate(t.actualStart);
+  document.getElementById('finp-actualEnd').value     = toInputDate(t.actualEnd);
+  document.getElementById('finp-agingStart').value    = toInputDate(t.agingStart);
+  document.getElementById('finp-agingEnd').value      = toInputDate(t.agingEnd);
+  document.getElementById('finp-inspectStart').value  = toInputDate(t.inspectStart);
+  document.getElementById('finp-inspectEnd').value    = toInputDate(t.inspectEnd);
+  document.getElementById('finp-shipDate').value      = toInputDate(t.shipDate);
+  document.getElementById('fieldModal').classList.add('visible');
+  setTimeout(() => document.getElementById('finp-id').select(), 50);
+}
+function closeFieldModal(e) {
+  if (e.target === document.getElementById('fieldModal')) closeFieldModalDirect();
+}
+function closeFieldModalDirect() {
+  document.getElementById('fieldModal').classList.remove('visible'); fieldEditId = null;
+}
+function saveField() {
+  if (!fieldEditId) return;
+  const t = tasks.find(x => x.id === fieldEditId);
+  if (!t) return;
+  const newId       = parseInt(document.getElementById('finp-id').value.trim());
+  const newModel    = document.getElementById('finp-model').value.trim();
+  const newCustomer = document.getElementById('finp-customer').value.trim();
+  const newPerson   = document.getElementById('finp-person').value.trim();
+  const newPS       = document.getElementById('finp-planStart').value;
+  const newPE       = document.getElementById('finp-planEnd').value;
+  const newAS       = document.getElementById('finp-actualStart').value;
+  const newAE       = document.getElementById('finp-actualEnd').value;
+  const newAGS      = document.getElementById('finp-agingStart').value;
+  const newAGE      = document.getElementById('finp-agingEnd').value;
+  const newIS       = document.getElementById('finp-inspectStart').value;
+  const newIE       = document.getElementById('finp-inspectEnd').value;
+  const newSD       = document.getElementById('finp-shipDate').value;
+  if (isNaN(newId)) { alert('IDは数値を入力してください。'); return; }
+  if (newId !== t.id && tasks.find(x => x.id === newId)) { alert('そのIDはすでに使用されています。'); return; }
+  if (!newModel || !newCustomer || !newPerson) { alert('空欄は入力できません。'); return; }
+  if (newPS && newPE && newPS > newPE) { alert('予定終了日は開始日以降にしてください。'); return; }
+  if (newAS && newAE && newAS > newAE) { alert('実績終了日は開始日以降にしてください。'); return; }
+  if (newAGS && newAGE && newAGS > newAGE) { alert('エージング終了日は開始日以降にしてください。'); return; }
+  if (newIS && newIE && newIS > newIE) { alert('検査終了日は開始日以降にしてください。'); return; }
+  t.id = newId; t.model = newModel; t.customer = newCustomer; t.person = newPerson;
+  if (newPS) t.planStart = fromInputDate(newPS);
+  if (newPE) t.planEnd   = fromInputDate(newPE);
+  t.actualStart  = newAS  ? fromInputDate(newAS)  : null;
+  t.actualEnd    = newAE  ? fromInputDate(newAE)  : null;
+  t.agingStart   = newAGS ? fromInputDate(newAGS) : null;
+  t.agingEnd     = newAGE ? fromInputDate(newAGE) : null;
+  t.inspectStart = newIS  ? fromInputDate(newIS)  : null;
+  t.inspectEnd   = newIE  ? fromInputDate(newIE)  : null;
+  t.shipDate     = newSD  ? fromInputDate(newSD)  : null;
+  sortTasks();
+  rebuildEditTaskSel(); rebuildFilterSelects();
+  closeFieldModalDirect(); render();
+}
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { closeFieldModalDirect(); closeAddTaskModalDirect(); }
+});
+
+initSelects();
+sortTasks();
+// 初期ソートボタン状態
+const initSortBtn = document.getElementById('sort-id');
+if (initSortBtn) initSortBtn.classList.add('asc');
+initColFilter();
+setViewportHeight();
+render();
+updateVScroll();
+initVScroll();
+</script>
+</body>
+</html>
