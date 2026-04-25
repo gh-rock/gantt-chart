@@ -993,6 +993,10 @@
     display: flex;
     flex-direction: column;
     gap: 10px;
+    max-height: 70vh;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-light) transparent;
   }
   .modal-meta {
     font-size: 11px;
@@ -1182,18 +1186,10 @@
       <span class="ctrl-label" style="min-width:80px; margin-left:16px;">出荷日</span>
       <div class="toggle on" id="togShip" onclick="toggleVis('ship')"></div>
     </div>
-    <div class="ctrl-row">
+    <div class="ctrl-row" style="grid-column:1/-1;">
       <span class="ctrl-label">編集タスクID</span>
       <select id="editTaskSel" onchange="selectTask(this.value)"></select>
-      <span class="ctrl-label" style="min-width:50px;margin-left:12px">品種</span>
-      <select id="filterModel" onchange="applyFilters()"></select>
-    </div>
-    <div class="ctrl-row" style="grid-column:1/-1;">
-      <span class="ctrl-label">顧客名</span>
-      <select id="filterCustomer" onchange="applyFilters()"></select>
-      <span class="ctrl-label" style="min-width:50px">担当者</span>
-      <select id="filterPerson" onchange="applyFilters()"></select>
-      <button class="ctrl-edit-btn" onclick="openFieldModal(selectedTaskId)" title="選択タスクのID・品種・顧客名・担当者を編集">✏️</button>
+      <button class="ctrl-edit-btn" onclick="openFieldModal(selectedTaskId)" title="選択タスクを編集">✏️ 編集</button>
     </div>
     <div style="grid-column:1/-1;display:flex;gap:10px;">
       <button class="btn-add-task" onclick="openAddTaskModal()">＋ タスク追加</button>
@@ -1490,6 +1486,9 @@ document.addEventListener('keydown', e => {
           <input type="date" class="modal-input" id="finp-shipDate">
         </div>
       </div>
+
+      <div class="modal-section-divider">📝 備考</div>
+      <textarea class="modal-textarea" id="finp-memo" placeholder="例：前工程待ち・材料入荷予定1/4・客先確認済み など" rows="3"></textarea>
     </div>
     <div class="modal-footer">
       <button class="modal-btn-cancel" onclick="closeFieldModalDirect()">キャンセル</button>
@@ -2159,15 +2158,13 @@ function renderTable(visTasks) {
       <td class="td-id">${t.id}</td>
       <td class="td-type">${t.customer}</td>
       <td>${t.model}</td>
-      <td>${t.person}
-        <button class="edit-btn always-visible" onclick="openFieldModal(${t.id})" title="編集">✏️</button>
-      </td>
+      <td>${t.person}</td>
       <td><span class="badge badge-plan">${fmtDate(t.planStart)} – ${fmtDate(t.planEnd)}</span></td>
       <td>${aStatus}</td>
       <td>${agingHtml}</td>
       <td>${inspectHtml}</td>
       <td>${shipHtml}</td>
-      <td class="td-memo">${memoHtml}<button class="memo-btn" onclick="openMemoModal(${t.id})">✏️</button></td>`;
+      <td class="td-memo">${memoHtml}</td>`;
     tbody.appendChild(tr);
   });
 }
@@ -2197,6 +2194,18 @@ function selectTask(id) {
   render();
 }
 function applyFilters() { applyAllFilters(); }
+function applyAllFilters() {
+  filteredIds = tasks
+    .filter(t =>
+      colFilterState.id.has(String(t.id)) &&
+      colFilterState.customer.has(t.customer) &&
+      colFilterState.model.has(t.model) &&
+      colFilterState.person.has(t.person))
+    .map(t => t.id);
+  vScrollOffset = 0;
+  render();
+  updateVScroll();
+}
 function resetAll() {
   tasks = originalTasks.map(t => ({
     ...t,
@@ -2219,9 +2228,6 @@ function resetAll() {
   document.querySelectorAll('#periodBtns .btn').forEach((b,i) => b.classList.toggle('active', i===0));
   document.getElementById('periodSel').value = '1';
   document.getElementById('chartScroll').scrollLeft = 0;
-  document.getElementById('filterCustomer').value = '全て';
-  document.getElementById('filterPerson').value = '全て';
-  document.getElementById('filterModel').value = '全て';
   vScrollOffset = 0;
   render();
   updateVScroll();
@@ -2462,25 +2468,6 @@ function applyColFilter() {
   applyAllFilters();
 }
 
-function applyAllFilters() {
-  const cust   = document.getElementById('filterCustomer').value;
-  const person = document.getElementById('filterPerson').value;
-  const model  = document.getElementById('filterModel').value;
-  filteredIds = tasks
-    .filter(t =>
-      (cust   === '全て' || t.customer === cust) &&
-      (person === '全て' || t.person   === person) &&
-      (model  === '全て' || t.model    === model) &&
-      colFilterState.id.has(String(t.id)) &&
-      colFilterState.customer.has(t.customer) &&
-      colFilterState.model.has(t.model) &&
-      colFilterState.person.has(t.person))
-    .map(t => t.id);
-  vScrollOffset = 0;
-  render();
-  updateVScroll();
-}
-
 // ===================== ADD TASK MODAL =====================
 function openAddTaskModal() {
   const usedIds = new Set(tasks.map(t => t.id));
@@ -2562,14 +2549,9 @@ function rebuildEditTaskSel() {
   sel.value = last.id; selectedTaskId = last.id;
 }
 function rebuildFilterSelects() {
-  const rebuild = (elId, arr) => {
-    const el = document.getElementById(elId); const cur = el.value; el.innerHTML = '';
-    arr.forEach(v => { const o = document.createElement('option'); o.value = v; o.textContent = v; el.appendChild(o); });
-    el.value = arr.includes(cur) ? cur : '全て';
-  };
-  rebuild('filterModel',    ['全て', ...new Set(tasks.map(t => t.model))]);
-  rebuild('filterCustomer', ['全て', ...new Set(tasks.map(t => t.customer))]);
-  rebuild('filterPerson',   ['全て', ...new Set(tasks.map(t => t.person))]);
+  ['id','customer','model','person'].forEach(col => {
+    colFilterState[col] = new Set(tasks.map(COL_GETTERS[col]));
+  });
 }
 
 // ===================== FIELD EDIT MODAL =====================
@@ -2593,6 +2575,7 @@ function openFieldModal(taskId) {
   document.getElementById('finp-inspectStart').value  = toInputDate(t.inspectStart);
   document.getElementById('finp-inspectEnd').value    = toInputDate(t.inspectEnd);
   document.getElementById('finp-shipDate').value      = toInputDate(t.shipDate);
+  document.getElementById('finp-memo').value          = t.memo || '';
   document.getElementById('fieldModal').classList.add('visible');
   setTimeout(() => document.getElementById('finp-id').select(), 50);
 }
@@ -2636,6 +2619,7 @@ function saveField() {
   t.inspectStart = newIS  ? fromInputDate(newIS)  : null;
   t.inspectEnd   = newIE  ? fromInputDate(newIE)  : null;
   t.shipDate     = newSD  ? fromInputDate(newSD)  : null;
+  t.memo         = document.getElementById('finp-memo').value.trim();
   sortTasks();
   rebuildEditTaskSel(); rebuildFilterSelects();
   closeFieldModalDirect(); render();
@@ -2644,7 +2628,15 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') { closeFieldModalDirect(); closeAddTaskModalDirect(); }
 });
 
-initSelects();
+// editTaskSel・フィルター初期化
+(function initSelects() {
+  const editSel = document.getElementById('editTaskSel');
+  tasks.forEach(t => {
+    const opt = document.createElement('option');
+    opt.value = t.id; opt.textContent = t.id;
+    editSel.appendChild(opt);
+  });
+})();
 sortTasks();
 // 初期ソートボタン状態
 const initSortBtn = document.getElementById('sort-id');
